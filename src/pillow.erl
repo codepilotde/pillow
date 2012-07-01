@@ -23,33 +23,35 @@
 -module(pillow).
 -author('Martin Donath <md@struct.cc>').
 
--export([start/0, loop/2, rec/2, stop/0]).
+% Export functions demanded by the OTP Application behaviour.
+-behaviour(application).
+-export([start/2, stop/1, init/1]).
 
-start() ->
+% Define parameters for supervisor specification.
+-define(MAX_RESTART,  1).
+-define(MAX_SECONDS, 60).
 
-	{ ok, Server } = server:start(?MODULE, 7000, { ?MODULE, callback, [] }),
-	Store = dict:new(),
-	spawn_link(?MODULE, rec, [ Server, Store ]).
+% Start the pillow application by initializing he supervisor.
+start(_Type, Args) ->
+  supervisor:start_link(?MODULE, Args).
 
-stop() ->
-  self() ! { request, stop }.
+% Executed after the application is stopped.
+stop(_State) ->
+  ok.
 
-rec(Server, _) ->
-  receive
-    % Stop the database server.
-    { request, stop } ->
-      %server:stop(Server)
-      "hahahahahahahahahahaha"
-  end.
+% Setup and return the specification for the supervisor with specific ports.
+init([CushionPort, StoragePort]) ->
+  { ok, {
+    { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
 
-% während ausgelesen wird, darf auf keinen fall weiter reingeschrieben werden!
-% nach auslesen wieder freigeben!
-callback(Socket, _) ->
-  case gen_tcp:recv(Socket, 0) of
-    { ok, Data } ->
-      gen_tcp:send(Socket, Data),
-      loop(Socket, []);
-    { error, closed } ->
-      ok
-  end.
+      % TCP server for cushioning/buffering.
+      { cushion, { pillow_cushion, start, [CushionPort] },
+        temporary, 2000, worker, []
+      },
 
+      % TCP server for dumping the current storage state.
+      { storage, { pillow_storage, start, [StoragePort] },
+        temporary, 2000, worker, []
+      }
+    ]
+  } }.

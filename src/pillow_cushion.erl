@@ -20,35 +20,29 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
--module(store).
+-module(pillow_cushion).
 -author('Martin Donath <md@struct.cc>').
 
--export([start/0, loop/2, rec/2, stop/0]).
+% Functions exported for public usage.
+-export([start/1, logic/1]).
 
-start() ->
+% Start a server on the provided port and hand execution to the event loop.
+start(Port) when is_integer(Port) ->
+	pillow_server:start(Port, { ?MODULE, logic }).
 
-	{ ok, Server } = server:start(?MODULE, 7000, { ?MODULE, loop, [] }),
-	Store = dict:new(),
-	spawn_link(?MODULE, rec, [ Server, Store ]).
-
-stop() ->
-  self() ! { request, stop }.
-
-rec(Server, _) ->
-  receive
-    % Stop the database server.
-    { request, stop } ->
-      %server:stop(Server)
-      "test"
-  end.
-
-% während ausgelesen wird, darf auf keinen fall weiter reingeschrieben werden!
-% nach auslesen wieder freigeben!
-loop(Socket) ->
+% If we receive a new package, process data and hand it to the storage.
+logic(Socket) ->
   case gen_tcp:recv(Socket, 0) of
+
+    % We received a new data chunk, so process it and hand it to the storage.
     { ok, Data } ->
-      gen_tcp:send(Socket, Data),
-      loop(Socket);
+
+      %gen_tcp:send(Socket, Data),
+      [Key | Value] = string:tokens(Data, " \n"),
+      pillow_storage ! { store, Key, Value },
+      logic(Socket);
+
+    % An error occurred and the connection was closed.
     { error, closed } ->
       ok
   end.

@@ -20,7 +20,7 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
--module(server).
+-module(pillow_server).
 -author('Martin Donath <md@struct.cc>').
 
 % Export functions demanded by the OTP Generic Server behaviour.
@@ -31,8 +31,8 @@
 % Internal function for asynchronous execution of the provided callback.
 -export([execute/1]).
 
-% These are the functions that are exported to communicate with the server.
--export([start/3]).
+% Functions exported for public usage.
+-export([start/2]).
 
 % The server state contains the port the server should be listening on, as well
 % as a tuple containing a reference to the callback function (loop).
@@ -41,13 +41,11 @@
 
 % Start a server on the provided port and register the provided callback.
 % This method is used to start the server module from outside.
-start(Name, Port, Callback) when is_integer(Port), is_tuple(Callback) ->
-  gen_server:start_link(
-    { local, Name }, ?MODULE, #state{ port = Port, call = Callback }, []
-  ).
+start(Port, Callback) when is_integer(Port), is_tuple(Callback) ->
+  gen_server:start_link(?MODULE, #state{ port = Port, call = Callback }, []).
 
 % Initialize a TCP server on the provided port and handle incoming
-% connecitons, called by gen_server:start_link/4.
+% connections, called by gen_server:start_link/4.
 init(State = #state{ port = Port }) ->
   case gen_tcp:listen(Port, ?OPTIONS) of
 
@@ -58,19 +56,19 @@ init(State = #state{ port = Port }) ->
 
     % The connection failed for some reason.
     { error, Reason } ->
-     	{ stop, Reason }
+      { stop, Reason }
   end.
 
 % Accept an incoming connection on the listening socket.
 accept(State = #state{ socket = Listen, call = Callback }) ->
-	spawn_link(?MODULE, execute, [{ self(), Listen, Callback }]),
-	State.
+  spawn_link(?MODULE, execute, [{ self(), Listen, Callback }]),
+  State.
 
 % Execute the provided callback asynchronously.
 execute({ Server, Listen, { Module, Function } }) ->
-	{ ok, Socket } = gen_tcp:accept(Listen),
-	gen_server:cast(Server, { accepted, self() }),
-	Module:Function(Socket).
+  { ok, Socket } = gen_tcp:accept(Listen),
+  gen_server:cast(Server, { accepted, self() }),
+  Module:Function(Socket).
 
 % --- Just implemented for convenience. TBD: Robustness!
 handle_cast({ accepted, _Pid }, State = #state{} ) -> { noreply, State }.
