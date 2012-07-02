@@ -27,11 +27,14 @@
 -behaviour(application).
 -export([start/2, stop/1, init/1]).
 
+% Export functions demanded by the OTP Generic Server behaviour.
+-export([setup/1, loop/1, push/1, dump/1]).
+
 % Define parameters for supervisor specification.
 -define(MAX_RESTART,  1).
 -define(MAX_SECONDS, 60).
 
-% Start the pillow application by initializing he supervisor.
+% Start the pillow application by initializing the supervisor.
 start(_Type, Args) ->
   supervisor:start_link(?MODULE, Args).
 
@@ -39,19 +42,42 @@ start(_Type, Args) ->
 stop(_State) ->
   ok.
 
-% Setup and return the specification for the supervisor with specific ports.
-init([CushionPort, StoragePort]) ->
+% Setup and return the specification for the supervisor.
+init(Ports) ->
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
-
-      % TCP server for cushioning/buffering.
-      { cushion, { pillow_cushion, start, [CushionPort] },
-        temporary, 2000, worker, []
-      },
-
-      % TCP server for dumping the current storage state.
-      { storage, { pillow_storage, start, [StoragePort] },
+      { undefined, { ?MODULE, setup, [Ports] },
         temporary, 2000, worker, []
       }
     ]
   } }.
+
+% Start two servers for pushing data into and dumping data from the dictionary.
+setup([Push, Dump]) ->
+	spawn_link(?MODULE, loop, [dict:new()]), % TODO. use ETS instead of DICT.
+	pillow_server:start(Push, { ?MODULE, push }),
+	pillow_server:start(Dump, { ?MODULE, dump }),
+	{ ok, self() }.
+
+% TBD
+loop(Dict) ->
+  receive
+    { ok, Data } ->
+      loop(Dict)
+  end.
+
+push(Socket) ->
+  push(Socket).
+
+dump(Socket) ->
+  case gen_tcp:recv(Socket, 0) of
+
+    % We received a new data chunk, so process it and hand it to the storage.
+    { ok, Data } ->
+      gen_tcp:send(Socket, Data),
+      dump(Socket);
+
+    % An error occurred and the connection was closed.
+    { error, closed } ->
+      ok
+  end.

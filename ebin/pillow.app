@@ -1,13 +1,11 @@
 { application, pillow, [
   { description, "Lightweight Erlang TCP server to buffer/cushion volatile key-value streams" },
-  { vsn,"0.0.1" },
+  { vsn, "0.0.1" },
   { modules, [
 	  pillow,
-	  pillow_cushion,
-	  pillow_server,
-	  pillow_storage
+	  pillow_server
 	]},
-  { registered, [pillow_cushion, pillow_storage] },
+  { registered, [] },
   { applications, [kernel, stdlib] },
   { mod, { pillow, [7000, 7001] } },
   { env, [] }
