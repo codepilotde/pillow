@@ -21,7 +21,7 @@
 % SOFTWARE.
 
 -module(pillow_server).
--author('Martin Donath <md@struct.cc>').
+-author("Martin Donath <md@struct.cc>").
 
 % Export functions demanded by the OTP Generic Server behaviour.
 -behaviour(gen_server).
