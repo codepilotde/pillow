@@ -65,12 +65,12 @@ accept(State = #state{ socket = Listen, call = Callback }) ->
   State.
 
 % Execute the provided callback asynchronously.
-execute({ Server, Listen, { Module, Function } }) ->
+execute({ Server, Listen, { Module, Function, Params } }) ->
   { ok, Socket } = gen_tcp:accept(Listen),
   gen_server:cast(Server, { accepted, self() }),
-  Module:Function(Socket).
+  Module:Function(Socket, Params).
 
-% --- Just implemented for convenience. TBD: Robustness!
+% --- Just implemented for convenience. TBD: Implement for Robustness!
 handle_cast({ accepted, _Pid }, State = #state{} ) -> { noreply, State }.
 handle_call(_Request, _From, State) -> { noreply, State }.
 handle_info(_Request, Library) -> { noreply, Library }.

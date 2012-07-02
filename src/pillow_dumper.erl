@@ -20,35 +20,29 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
--module(pillow).
+-module(pillow_dumper).
 -author("Martin Donath <md@struct.cc>").
 
-% Export functions demanded by the OTP Application behaviour.
--behaviour(application).
--export([start/2, stop/1, init/1]).
+% Export functions for public use.
+-export([start/2, handle/2]).
 
-% Define parameters for supervisor specification.
--define(MAX_RESTART,  1).
--define(MAX_SECONDS, 60).
+% Start a server on the provided port and hand over the Ets instance to the
+% callback which is invoked by the server upon an incoming connection. 
+start(Port, Ets) ->
+  pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
 
-% Start the pillow application by initializing the supervisor.
-start(_Type, Args) ->
-  supervisor:start_link(?MODULE, Args).
-
-% Executed after the application is stopped.
-stop(_State) ->
+% Handle a TCP connection socket and stream a dump of the current term storage
+% to the socket upon request.
+handle(Socket, [Ets]) ->
+  Data = lists:flatten(format(ets:tab2list(Ets))),
+  gen_tcp:send(Socket, Data ++ "\n"),
+  gen_tcp:close(Socket),
   ok.
 
-% Setup and return the worker specifications for the supervisor.
-init(_Ports = [Pusher, Dumper]) ->
-  Ets = ets:new(pillow_storage, [ordered_set, public]),
-  { ok, {
-    { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
-      { pillow_pusher, { pillow_pusher, start, [Pusher, Ets] },
-        temporary, 2000, worker, []
-      },
-      { pillow_dumper, { pillow_dumper, start, [Dumper, Ets] },
-        temporary, 2000, worker, []
-      }
-    ]
-  } }.
+% TBD
+format([]) -> [];
+format(List) ->
+  [[_|F]|R] = [
+    ["\n","HSET ",Key," 0 ",string:join(Value, ";")] || {Key, Value} <- List
+  ],
+  [F|R].
