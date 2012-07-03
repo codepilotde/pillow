@@ -24,7 +24,7 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/2, handle/2]).
+-export([start/2, handle/2, write/2]).
 
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection. 
@@ -40,13 +40,22 @@ handle(Socket, [Ets]) ->
     % after splitting the data we found into a key/value combination and re-
     % enter the handle loop for further processing.
     { ok, Bytes } ->
-      Data = binary_to_list(Bytes) -- [13, 10],
-      ets:insert(Ets, split(Data, $\;)),
+      spawn(?MODULE, write, [binary_to_list(Bytes), Ets]),
       handle(Socket, [Ets]);
 
     % The socket handle was closed, so exit the event loop.
     { error, closed } ->
       ok
+  end.
+
+% Split the provided data at line breaks and write each entry into the term
+% storage. If the second element is an empty list, we're done.
+write(Data, Ets) ->
+  { Entry, Rest } = split(Data, $\n),
+  ets:insert(Ets, split(Entry, $\;)),
+  case Rest of
+    [] -> ok;
+    __ -> write(Rest, Ets)
   end.
 
 % Split the string/list at the first occurence of the provided separator and

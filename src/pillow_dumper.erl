@@ -38,4 +38,5 @@ handle(Socket, [Ets]) ->
     [Key, $\;, Value, $\n | List]
   end, [], Ets),
   gen_tcp:send(Socket, Data), gen_tcp:close(Socket),
-  ets:delete_all_objects(Ets), ok.
+  ets:delete_all_objects(Ets),
+  ok.
