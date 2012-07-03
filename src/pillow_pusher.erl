@@ -21,9 +21,9 @@
 % SOFTWARE.
 
 -module(pillow_pusher).
--author("Martin Donath <md@struct.cc>").
+-author('Martin Donath <md@struct.cc>').
 
-% Export functions for public use.
+% Public functions.
 -export([start/2, handle/2]).
 
 % Start a server on the provided port and hand over the Ets instance to the
@@ -37,15 +37,28 @@ handle(Socket, [Ets]) ->
   case gen_tcp:recv(Socket, 0) of
 
     % We received some bytes from the TCP socket, so update the term storage
-    % with the key/value combination we found and re-enter the handle loop for
-    % further processing.
+    % after splitting the data we found into a key/value combination and re-
+    % enter the handle loop for further processing.
     { ok, Bytes } ->
-      Data = binary_to_list(Bytes) -- [10, 13],
-      [Key | Value] = string:tokens(Data, ";"),
-      ets:insert(Ets, { Key, Value }),
+      Data = binary_to_list(Bytes) -- [13, 10],
+      ets:insert(Ets, split(Data, $\;)),
       handle(Socket, [Ets]);
 
-    % The socket handle was closed, so exit the handle loop.
+    % The socket handle was closed, so exit the event loop.
     { error, closed } ->
       ok
+  end.
+
+% Split the string/list at the first occurence of the provided separator and
+% return both lists in a tuple.
+split(List, Separator) ->
+  split(List, [], Separator).
+split(List, Memory, Separator) when is_list(List) and is_integer(Separator) ->
+  case List of
+    [Separator | Tail] ->
+      { [], Tail };
+    [Head | Tail] ->
+      { L, M } = split(Tail, Memory, Separator), { [Head | L], M };
+    [] ->
+      { List, Memory }
   end.

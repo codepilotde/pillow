@@ -21,9 +21,9 @@
 % SOFTWARE.
 
 -module(pillow_dumper).
--author("Martin Donath <md@struct.cc>").
+-author('Martin Donath <md@struct.cc>').
 
-% Export functions for public use.
+% Public functions.
 -export([start/2, handle/2]).
 
 % Start a server on the provided port and hand over the Ets instance to the
@@ -34,15 +34,8 @@ start(Port, Ets) ->
 % Handle a TCP connection socket and stream a dump of the current term storage
 % to the socket upon request.
 handle(Socket, [Ets]) ->
-  Data = lists:flatten(format(ets:tab2list(Ets))),
-  gen_tcp:send(Socket, Data ++ "\n"),
-  gen_tcp:close(Socket),
-  ok.
-
-% TBD
-format([]) -> [];
-format(List) ->
-  [[_|F]|R] = [
-    ["\n","HSET ",Key," 0 ",string:join(Value, ";")] || {Key, Value} <- List
-  ],
-  [F|R].
+  Data = ets:foldr(fun({ Key, Value }, List) -> 
+    [Key, $\;, Value, $\n | List]
+  end, [], Ets),
+  gen_tcp:send(Socket, Data), gen_tcp:close(Socket),
+  ets:delete_all_objects(Ets), ok.

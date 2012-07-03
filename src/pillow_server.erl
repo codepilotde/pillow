@@ -21,21 +21,21 @@
 % SOFTWARE.
 
 -module(pillow_server).
--author("Martin Donath <md@struct.cc>").
+-author('Martin Donath <md@struct.cc>').
 
-% Export functions demanded by the OTP Generic Server behaviour.
+% Functions demanded by the OTP Generic Server behaviour.
 -behaviour(gen_server).
--export([init/1, terminate/2, handle_info/2,
-         handle_cast/2, handle_call/3, code_change/3]).
+-export([init/1, terminate/2, handle_cast/2,
+         handle_info/2, handle_call/3, code_change/3]).
 
-% Internal function for asynchronous execution of the provided callback.
--export([execute/1]).
+% Internal functions.
+-export([accept_loop/1]).
 
-% Functions exported for public usage.
+% Public functions.
 -export([start/2]).
 
-% The server state contains the port the server should be listening on, as well
-% as a tuple containing a reference to the callback function (loop).
+% The server state contains the port the server should be listening on, the
+% socket, as well as a tuple containing a reference to the callback function.
 -record(state, { port, call, ip = any, socket = null }).
 -define(OPTIONS, [ binary, { packet, 0 }, { active, false }, { reuseaddr, true }]).
 
@@ -45,12 +45,11 @@ start(Port, Callback) when is_integer(Port), is_tuple(Callback) ->
   gen_server:start_link(?MODULE, #state{ port = Port, call = Callback }, []).
 
 % Initialize a TCP server on the provided port and handle incoming
-% connections, called by gen_server:start_link/4.
+% connections, called by gen_server:start_link/3.
 init(State = #state{ port = Port }) ->
   case gen_tcp:listen(Port, ?OPTIONS) of
 
-    % The listening socket could be instantiated, so call the accept function
-    % after adding a reference to the listening socket.
+    % The listening socket could be instantiated, so call the accept function..
     { ok, Listen } ->
       { ok, accept(State#state{ socket = Listen }) };
 
@@ -59,20 +58,35 @@ init(State = #state{ port = Port }) ->
       { stop, Reason }
   end.
 
-% Accept an incoming connection on the listening socket.
+% An incoming connection was accepted on the listening socket, so spawn a new
+% process invoking the accept loop.
 accept(State = #state{ socket = Listen, call = Callback }) ->
-  spawn_link(?MODULE, execute, [{ self(), Listen, Callback }]),
+  spawn_link(?MODULE, accept_loop, [{ self(), Listen, Callback }]),
   State.
 
-% Execute the provided callback asynchronously.
-execute({ Server, Listen, { Module, Function, Params } }) ->
+% When an incoming connection occurs, call the provided callback.
+accept_loop({ Server, Listen, { Module, Function, Params } }) ->
   { ok, Socket } = gen_tcp:accept(Listen),
   gen_server:cast(Server, { accepted, self() }),
   Module:Function(Socket, Params).
 
-% --- Just implemented for convenience. TBD: Implement for Robustness!
-handle_cast({ accepted, _Pid }, State = #state{} ) -> { noreply, State }.
-handle_call(_Request, _From, State) -> { noreply, State }.
-handle_info(_Request, Library) -> { noreply, Library }.
-terminate(_Reason, _Library) -> ok.
-code_change(_OldVersion, Library, _Extra) -> { ok, Library }.
+% Callback for asynchronous server calls, spawn a new acceptor.
+handle_cast({ accepted, _Pid }, State = #state{} ) ->
+  { noreply, accept(State) }.
+
+% Callback for synchronous server calls.
+handle_call(Request, _From, State) ->
+  { stop, { unknown_call, Request }, State }.
+
+% Don't handle any messages directly sent to the server's mailbox.
+handle_info(_Info, State) ->
+  { noreply, State }.
+
+% Callback executed on server shutdown.
+terminate(_Reason, State) ->
+  gen_tcp:close(State#state.socket),
+  ok.
+
+% Convert the process state when the code of the server is changed.
+code_change(_Old, State, _Extra) ->
+  { ok, State }.

@@ -3,4 +3,4 @@ all:
 
 clean:
 	rm -rf ebin/*.beam;
-	rm -rf erl_crush.dump
+	rm -rf ebin/*.dump

@@ -21,7 +21,7 @@
 % SOFTWARE.
 
 -module(pillow).
--author("Martin Donath <md@struct.cc>").
+-author('Martin Donath <md@struct.cc>').
 
 % Export functions demanded by the OTP Application behaviour.
 -behaviour(application).
