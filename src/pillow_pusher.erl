@@ -26,7 +26,7 @@
 % Public functions.
 -export([start/2, handle/2, write/2]).
 
-% Start a server on the provided port and hand over the Ets instance to the
+% Start a server on the provided port and hand over the Ets handle to the
 % callback which is invoked by the server upon an incoming connection. 
 start(Port, Ets) ->
   pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
@@ -40,7 +40,7 @@ handle(Socket, [Ets]) ->
     % after splitting the data we found into a key/value combination and re-
     % enter the handle loop for further processing.
     { ok, Bytes } ->
-      spawn(?MODULE, write, [binary_to_list(Bytes), Ets]),
+      spawn(?MODULE, write, [binary_to_list(Bytes), Ets]),                      % TODO: Check if line ends with LF. If not, keep collecting.
       handle(Socket, [Ets]);
 
     % The socket handle was closed, so exit the event loop.
@@ -52,7 +52,7 @@ handle(Socket, [Ets]) ->
 % storage. If the second element is an empty list, we're done.
 write(Data, Ets) ->
   { Entry, Rest } = split(Data, $\n),
-  ets:insert(Ets, split(Entry, $\;)),
+  ets:insert(Ets, split(Entry, $\;)),                                           % TODO: PUB/SUB exactly here.
   case Rest of
     [] -> ok;
     __ -> write(Rest, Ets)
