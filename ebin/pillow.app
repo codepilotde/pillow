@@ -3,13 +3,14 @@
   { vsn, "0.0.1" },
   { modules,
     [ pillow,
-      pillow_dumper,
-      pillow_pusher,
-	    pillow_server
+      pillow_export,
+      pillow_inflow,
+	    pillow_server,
+      pillow_stream
 	  ]
 	},
   { registered, [] },
   { applications, [kernel, stdlib] },
-  { mod, { pillow, [7000, 7001] } },
+  { mod, { pillow, [4096, 4097, 4098] } },
   { env, [] }
 ]}.

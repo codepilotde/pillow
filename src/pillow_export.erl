@@ -20,7 +20,7 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
--module(pillow_dumper).
+-module(pillow_export).
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
@@ -28,15 +28,15 @@
 
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection. 
-start(Port, Ets) ->
-  pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
+start(Port, Storage) ->
+  pillow_server:start(Port, { ?MODULE, handle, [Storage] }).
 
-% Handle a TCP connection socket and stream a dump of the current term storage
-% to the socket upon request.
-handle(Socket, [Ets]) ->
+% Stream a snapshot of the current term storage (Ets) to the provided socket
+% upon request and drop everything afterwards.
+handle(Socket, [Storage]) ->
   Data = ets:foldr(fun({ Key, Value }, List) -> 
     [Key, $\;, Value, $\n | List]
-  end, [], Ets),
+  end, [], Storage),
   gen_tcp:send(Socket, Data), gen_tcp:close(Socket),
-  ets:delete_all_objects(Ets),
+  ets:delete_all_objects(Storage),
   ok.

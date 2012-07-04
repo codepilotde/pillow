@@ -28,7 +28,7 @@
 -export([start/2, stop/1, init/1]).
 
 % Define parameters for supervisor specification.
--define(MAX_RESTART,  1).
+-define(MAX_RESTART,  5).
 -define(MAX_SECONDS, 60).
 
 % Start the pillow application by initializing the supervisor.
@@ -39,15 +39,19 @@ start(_Type, Args) ->
 stop(_State) ->
   ok.
 
-% Setup and return the worker specifications for the supervisor.
-init(_Ports = [Pusher, Dumper]) ->
-  Ets = ets:new(pillow_storage, [ordered_set, public]),
+% Setup term storages and return the worker specifications for the supervisor.
+init(_Ports = [Inflow, Export, Stream]) ->
+  Storage = ets:new(pillow_storage, [ordered_set, public]),
+  Clients = ets:new(pillow_clients, [set, public]),
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
-      { pillow_pusher, { pillow_pusher, start, [Pusher, Ets] },
+      { pillow_export, { pillow_export, start, [Export, Storage] },
         temporary, 2000, worker, []
       },
-      { pillow_dumper, { pillow_dumper, start, [Dumper, Ets] },
+      { pillow_inflow, { pillow_inflow, start, [Inflow, Storage, Clients] },
+        temporary, 2000, worker, []
+      },
+      { pillow_stream, { pillow_stream, start, [Stream, Clients] },
         temporary, 2000, worker, []
       }
     ]

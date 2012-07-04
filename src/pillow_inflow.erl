@@ -20,43 +20,62 @@
 % CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 % SOFTWARE.
 
--module(pillow_pusher).
+-module(pillow_inflow).
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/2, handle/2, write/2]).
+-export([start/3, handle/2, process/3, stream/2]).
 
-% Start a server on the provided port and hand over the Ets handle to the
+% Start a server on the provided port and hand over the Ets instances to the
 % callback which is invoked by the server upon an incoming connection. 
-start(Port, Ets) ->
-  pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
+start(Port, Storage, Clients) ->
+  pillow_server:start(Port, { ?MODULE, handle, [Storage, Clients] }).
 
-% Handle a TCP connection socket and update the term storage with the data that
-% is pushed through the socket.
-handle(Socket, [Ets]) ->
+% Handle the data streamed over the socket and push it into the term storage.
+% Also, notify any subscribed clients on specific updates.
+handle(Socket, [Storage, Clients]) ->
   case gen_tcp:recv(Socket, 0) of
 
-    % We received some bytes from the TCP socket, so update the term storage
-    % after splitting the data we found into a key/value combination and re-
-    % enter the handle loop for further processing.
+    % We received some bytes from the socket, so spawn a new process to process
+    % the data and re-enter the event loop to receive further data.
     { ok, Bytes } ->
-      spawn(?MODULE, write, [binary_to_list(Bytes), Ets]),                      % TODO: Check if line ends with LF. If not, keep collecting.
-      handle(Socket, [Ets]);
+      spawn_link(?MODULE, process, [binary_to_list(Bytes), Storage, Clients]),
+      handle(Socket, [Storage, Clients]);
 
     % The socket handle was closed, so exit the event loop.
     { error, closed } ->
       ok
   end.
 
-% Split the provided data at line breaks and write each entry into the term
-% storage. If the second element is an empty list, we're done.
-write(Data, Ets) ->
+% Split the provided data at line breaks into key/value combinations and
+% process each entry by writing/streaming it.
+process(Data, Storage, Clients) ->
   { Entry, Rest } = split(Data, $\n),
-  ets:insert(Ets, split(Entry, $\;)),                                           % TODO: PUB/SUB exactly here.
+  ets:insert(Storage, { Key, _ } = split(Entry, $\;)),
+
+  % Check, if one or more clients subscribed for updates on the current key.
+  % If so, stream the current entry to all of them.
+  case ets:lookup(Clients, Key) of
+    [{ _, Pids }] ->
+      stream(Entry, Pids);
+    _ ->
+      ok
+  end,
+
+  % If we still have data to process, call the process function recursively.
   case Rest of
-    [] -> ok;
-    __ -> write(Rest, Ets)
+    [] ->
+      ok;
+    _ ->
+      process(Rest, Storage, Clients)
   end.
+
+% Stream an entry to the list of provided processes.
+stream(_, []) ->
+  ok;
+stream(Entry, [Pid | Rest]) ->
+  Pid ! { update, Entry },
+  stream(Entry, Rest).
 
 % Split the string/list at the first occurence of the provided separator and
 % return both lists in a tuple.
