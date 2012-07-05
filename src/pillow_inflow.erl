@@ -80,6 +80,10 @@ stream(Entry, [Pid | Rest]) ->
   Pid ! { update, Entry },
   stream(Entry, Rest).
 
+% -----------------------------------------------------------------------------
+% Private
+% -----------------------------------------------------------------------------
+
 % Partition a set of bytes at the last linefeed into two bitstrings. The second
 % bitstring is then appended in front of the string read from the socket.
 partition(Bytes) ->
