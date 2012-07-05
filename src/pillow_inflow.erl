@@ -24,7 +24,7 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/3, handle/2, process/3, stream/2]).
+ -export([start/3, handle/2, process/3, stream/2]).
 
 % Start a server on the provided port and hand over the Ets instances to the
 % callback which is invoked by the server upon an incoming connection. 
