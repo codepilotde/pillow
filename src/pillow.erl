@@ -46,13 +46,13 @@ init(_Ports = [Inflow, Export, Stream]) ->
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
       { pillow_export, { pillow_export, start, [Export, Storage] },
-        temporary, 2000, worker, []
+        permanent, 2000, worker, []
       },
       { pillow_inflow, { pillow_inflow, start, [Inflow, Storage, Clients] },
-        temporary, 2000, worker, []
+        permanent, 2000, worker, []
       },
       { pillow_stream, { pillow_stream, start, [Stream, Clients] },
-        temporary, 2000, worker, []
+        permanent, 2000, worker, []
       }
     ]
   } }.
