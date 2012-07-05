@@ -55,7 +55,6 @@ init(State = #state{ port = Port }) ->
 
     % Listening on the socket failed for some reason.
     { error, Reason } ->
-      error_logger:error_msg("gen_tcp:listen/2 failed: ~p~n", [Reason]),
       { stop, Reason }
   end.
 
@@ -74,9 +73,8 @@ accept_loop({ Server, Listen, { Module, Function, Params } }) ->
       gen_server:cast(Server, { accepted, self() }),
       Module:Function(Socket, Params);
 
-    % The connection failed for some reason.
-    { error, Reason } ->
-      error_logger:error_msg("gen_tcp:accept/1 failed: ~p~n", [Reason]),
+    % The connection failed for some reason or was closed.
+    { error, _ } ->
       ok
   end.
 

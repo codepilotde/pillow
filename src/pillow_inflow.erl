@@ -52,6 +52,8 @@ handle(Socket, Rest, [Storage, Clients]) ->
 
 % Split the provided data at line breaks into key/value combinations and
 % process each entry by writing/streaming it.
+process([], _, _) ->
+  ok;
 process(Data, Storage, Clients) ->
   { Entry, Rest } = separate(Data, $\n),
   ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),
@@ -95,6 +97,8 @@ partition(Bytes, Integer, Offset) ->
       Cuts = bit_size(Bytes) - Offset * 8,
       <<Left:Cuts/bits, Right/bits>> = Bytes,
       { Left, Right };
+    0 ->
+      { <<>>, Bytes };
     _ ->
       partition(Bytes, Integer, Offset + 1)
   end.
