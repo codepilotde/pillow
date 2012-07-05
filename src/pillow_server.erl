@@ -53,8 +53,9 @@ init(State = #state{ port = Port }) ->
     { ok, Listen } ->
       { ok, accept(State#state{ socket = Listen }) };
 
-    % The connection failed for some reason.
+    % Listening on the socket failed for some reason.
     { error, Reason } ->
+      error_logger:error_msg("gen_tcp:listen/2 failed: ~p~n", [Reason]),
       { stop, Reason }
   end.
 
@@ -66,9 +67,18 @@ accept(State = #state{ socket = Listen, call = Callback }) ->
 
 % When an incoming connection occurs, call the provided callback.
 accept_loop({ Server, Listen, { Module, Function, Params } }) ->
-  { ok, Socket } = gen_tcp:accept(Listen),
-  gen_server:cast(Server, { accepted, self() }),
-  Module:Function(Socket, Params).
+  case gen_tcp:accept(Listen) of
+
+    % A connection could be established, so execute our callback.
+    { ok, Socket } ->
+      gen_server:cast(Server, { accepted, self() }),
+      Module:Function(Socket, Params);
+
+    % The connection failed for some reason.
+    { error, Reason } ->
+      error_logger:error_msg("gen_tcp:accept/1 failed: ~p~n", [Reason]),
+      ok
+  end.
 
 % Callback for asynchronous server calls, spawn a new acceptor.
 handle_cast({ accepted, _Pid }, State = #state{} ) ->
