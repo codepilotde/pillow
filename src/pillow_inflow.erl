@@ -34,13 +34,16 @@ start(Port, Storage, Clients) ->
 % Handle the data streamed over the socket and push it into the term storage.
 % Also, notify any subscribed clients on specific updates.
 handle(Socket, [Storage, Clients]) ->
+  handle(Socket, <<>>, [Storage, Clients]).
+handle(Socket, Rest, [Storage, Clients]) ->
   case gen_tcp:recv(Socket, 0) of
 
     % We received some bytes from the socket, so spawn a new process to process
     % the data and re-enter the event loop to receive further data.
     { ok, Bytes } ->
-      spawn_link(?MODULE, process, [binary_to_list(Bytes), Storage, Clients]),
-      handle(Socket, [Storage, Clients]);
+      { Left, Right } = partition(<<Rest/bitstring, Bytes/bitstring>>),
+      spawn_link(?MODULE, process, [binary_to_list(Left), Storage, Clients]),
+      handle(Socket, Right, [Storage, Clients]);
 
     % The socket handle was closed, so exit the event loop.
     { error, closed } ->
@@ -50,8 +53,8 @@ handle(Socket, [Storage, Clients]) ->
 % Split the provided data at line breaks into key/value combinations and
 % process each entry by writing/streaming it.
 process(Data, Storage, Clients) ->
-  { Entry, Rest } = split(Data, $\n),
-  ets:insert(Storage, { Key, _ } = split(Entry, $\;)),
+  { Entry, Rest } = separate(Data, $\n),
+  ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),
 
   % Check, if one or more clients subscribed for updates on the current key.
   % If so, stream the current entry to all of them.
@@ -77,16 +80,31 @@ stream(Entry, [Pid | Rest]) ->
   Pid ! { update, Entry },
   stream(Entry, Rest).
 
+% Partition a set of bytes at the last linefeed into two bitstrings. The second
+% bitstring is then appended in front of the string read from the socket.
+partition(Bytes) ->
+  Size = bit_size(Bytes), <<Integer:Size/integer>> = Bytes,
+  partition(Bytes, Integer, 0).
+partition(Bytes, Integer, Offset) ->
+  case (Integer band (255 bsl Offset * 8)) bsr Offset * 8 of
+    10 ->
+      Cuts = bit_size(Bytes) - Offset * 8,
+      <<Left:Cuts/bits, Right/bits>> = Bytes,
+      { Left, Right };
+    _ ->
+      partition(Bytes, Integer, Offset + 1)
+  end.
+
 % Split the string/list at the first occurence of the provided separator and
 % return both lists in a tuple.
-split(List, Separator) ->
-  split(List, [], Separator).
-split(List, Memory, Separator) when is_list(List) and is_integer(Separator) ->
+separate(List, Separator) ->
+  separate(List, [], Separator).
+separate(List, Memory, Separator) when is_list(List) and is_integer(Separator) ->
   case List of
     [Separator | Tail] ->
       { [], Tail };
     [Head | Tail] ->
-      { L, M } = split(Tail, Memory, Separator), { [Head | L], M };
+      { L, M } = separate(Tail, Memory, Separator), { [Head | L], M };
     [] ->
       { List, Memory }
   end.
