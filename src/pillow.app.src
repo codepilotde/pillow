@@ -10,7 +10,7 @@
 	  ]
 	},
   { registered, [] },
-  { applications, [kernel, stdlib] },
+  { applications, [kernel, stdlib, statsd] },
   { mod, { pillow, [4096, 4097, 4098] } },
   { env, [] }
 ]}.
