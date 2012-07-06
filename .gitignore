@@ -3,5 +3,5 @@
 *.beam
 *.dump
 
-/rel/*
+/rel/pillow
 /deps/*
