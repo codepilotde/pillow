@@ -80,6 +80,11 @@ subscribe([Key | Rest], Pid, Clients) ->
 % Unsubscribe the update process from all keys.
 unsubscribe(Pid, Clients) ->
   ets:foldl(fun({ Key, Value }, _) -> 
-    ets:insert(Clients, { Key, Value -- [Pid] })
+    case Value -- [Pid] of
+      [] ->
+        ets:delete(Clients, Key);
+      Pids ->
+        ets:insert(Clients, { Key, Pids })
+    end
   end, [], Clients),
   ok.

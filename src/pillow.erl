@@ -31,6 +31,10 @@
 -define(MAX_RESTART,  5).
 -define(MAX_SECONDS, 60).
 
+% Define parameters for statistics via UDP.
+-define(STATSD_HOST, "localhost").
+-define(STATSD_PORT, 8125).
+
 % Start the pillow application by initializing the supervisor.
 start(_Type, Args) ->
   supervisor:start_link(?MODULE, Args).
@@ -41,10 +45,12 @@ stop(_State) ->
 
 % Setup term storages and return the worker specifications for the supervisor.
 init(_Ports = [Inflow, Export, Stream]) ->
-  Storage = ets:new(pillow_storage, [ordered_set, public]),
+  Storage = ets:new(pillow_storage, [ordered_set, public]),                     % COUNT erlang.pillow.processes ...
   Clients = ets:new(pillow_clients, [set, public]),
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
+
+      % Main worker processes (inflow, export, stream).
       { pillow_export, { pillow_export, start, [Export, Storage] },
         permanent, 2000, worker, []
       },

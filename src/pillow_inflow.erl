@@ -24,7 +24,7 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
- -export([start/3, handle/2, process/3, stream/2]).
+-export([start/3, handle/2, process/3, stream/2]).
 
 % Start a server on the provided port and hand over the Ets instances to the
 % callback which is invoked by the server upon an incoming connection. 
@@ -55,8 +55,8 @@ handle(Socket, Rest, [Storage, Clients]) ->
 process([], _, _) ->
   ok;
 process(Data, Storage, Clients) ->
-  { Entry, Rest } = separate(Data, $\n),
-  ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),
+  { Entry, Rest } = separate(Data, $\n),                                      % COUNT erlang.pillow.inflow.total
+  ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),                     % COUNT erlang.pillow.inflow.unique
 
   % Check, if one or more clients subscribed for updates on the current key.
   % If so, stream the current entry to all of them.
@@ -89,7 +89,7 @@ stream(Entry, [Pid | Rest]) ->
 % Partition a set of bytes at the last linefeed into two bitstrings. The second
 % bitstring is then appended in front of the string read from the socket.
 partition(Bytes) ->
-  Size = bit_size(Bytes), <<Integer:Size/integer>> = Bytes,
+  Size = bit_size(Bytes), <<Integer:Size/integer>> = Bytes,                     % COUNT erlang.pillow.inflow.buffer
   partition(Bytes, Integer, 0).
 partition(Bytes, Integer, Offset) ->
   case (Integer band (255 bsl Offset * 8)) bsr Offset * 8 of

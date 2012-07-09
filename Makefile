@@ -1,8 +1,8 @@
 all: 
-	rebar update-deps compile generate
+	rebar compile generate
 
 init:
-	rebar get-deps
+	rebar get-deps update-deps
 
 clean:
 	rebar clean
