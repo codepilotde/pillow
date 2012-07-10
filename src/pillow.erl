@@ -31,10 +31,6 @@
 -define(MAX_RESTART,  5).
 -define(MAX_SECONDS, 60).
 
-% Define parameters for statistics via UDP.
--define(STATSD_HOST, "localhost").
--define(STATSD_PORT, 8125).
-
 % Start the pillow application by initializing the supervisor.
 start(_Type, Args) ->
   supervisor:start_link(?MODULE, Args).
