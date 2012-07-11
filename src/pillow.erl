@@ -33,7 +33,8 @@
 
 % Start the pillow application by initializing the supervisor.
 start(_Type, Args) ->
-  supervisor:start_link(?MODULE, Args).
+  Pid = supervisor:start_link(?MODULE, Args),
+  estatsd:gauge("pillow.boot", 1), Pid.
 
 % Executed after the application is stopped.
 stop(_State) ->

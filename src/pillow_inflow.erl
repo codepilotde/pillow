@@ -24,16 +24,19 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/3, handle/2, process/3, stream/2]).
+-export([start/3, handle/2, process/3, stream/2, statistics/1]).
 
 % Start a server on the provided port and hand over the Ets instances to the
 % callback which is invoked by the server upon an incoming connection. 
 start(Port, Storage, Clients) ->
-  pillow_server:start(Port, { ?MODULE, handle, [Storage, Clients] }).
+  timer:apply_interval(10000, ?MODULE, statistics, [Storage]),
+  Pid = pillow_server:start(Port, { ?MODULE, handle, [Storage, Clients] }),
+  estatsd:gauge("pillow.inflow.boot", 1), Pid.
 
 % Handle the data streamed over the socket and push it into the term storage.
 % Also, notify any subscribed clients on specific updates.
 handle(Socket, [Storage, Clients]) ->
+  estatsd:increment("pillow.inflow.clients"),
   handle(Socket, <<>>, [Storage, Clients]).
 handle(Socket, Rest, [Storage, Clients]) ->
   case gen_tcp:recv(Socket, 0) of
@@ -42,21 +45,27 @@ handle(Socket, Rest, [Storage, Clients]) ->
     % the data and re-enter the event loop to receive further data.
     { ok, Bytes } ->
       { Left, Right } = partition(<<Rest/bitstring, Bytes/bitstring>>),
-      spawn_link(?MODULE, process, [binary_to_list(Left), Storage, Clients]),
+      spawn_link(?MODULE, process, [binary_to_list(Left), Storage, Clients]),         % 01 ASCII --> start of heading timestamp
+      estatsd:increment("pillow.inflow.bytes", byte_size(Bytes)),
       handle(Socket, Right, [Storage, Clients]);
 
     % The socket handle was closed, so exit the event loop.
     { error, closed } ->
+      estatsd:decrement("pillow.inflow.clients"),
       ok
   end.
 
 % Split the provided data at line breaks into key/value combinations and
 % process each entry by writing/streaming it.
-process([], _, _) ->
-  ok;
 process(Data, Storage, Clients) ->
-  { Entry, Rest } = separate(Data, $\n),                                      % COUNT erlang.pillow.inflow.total
-  ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),                     % COUNT erlang.pillow.inflow.unique
+  Updates = process(Data, Storage, Clients, 0),
+  estatsd:increment("pillow.inflow.total", Updates),
+  ok.
+process([], _, _, Updates) ->
+  Updates;
+process(Data, Storage, Clients, Updates) ->
+  { Entry, Rest } = separate(Data, $\n),
+  ets:insert(Storage, { Key, _ } = separate(Entry, $\;)),
 
   % Check, if one or more clients subscribed for updates on the current key.
   % If so, stream the current entry to all of them.
@@ -70,9 +79,9 @@ process(Data, Storage, Clients) ->
   % If we still have data to process, call the process function recursively.
   case Rest of
     [] ->
-      ok;
+      Updates;
     _ ->
-      process(Rest, Storage, Clients)
+      process(Rest, Storage, Clients, Updates + 1)
   end.
 
 % Stream an entry to the list of provided processes.
@@ -89,7 +98,7 @@ stream(Entry, [Pid | Rest]) ->
 % Partition a set of bytes at the last linefeed into two bitstrings. The second
 % bitstring is then appended in front of the string read from the socket.
 partition(Bytes) ->
-  Size = bit_size(Bytes), <<Integer:Size/integer>> = Bytes,                     % COUNT erlang.pillow.inflow.buffer
+  Size = bit_size(Bytes), <<Integer:Size/integer>> = Bytes,
   partition(Bytes, Integer, 0).
 partition(Bytes, Integer, Offset) ->
   case (Integer band (255 bsl Offset * 8)) bsr Offset * 8 of
@@ -116,3 +125,7 @@ separate(List, Memory, Separator) when is_list(List) and is_integer(Separator) -
     [] ->
       { List, Memory }
   end.
+
+% Send some statistics to estatsd.
+statistics(Storage) ->
+  estatsd:gauge("pillow.inflow.unique", ets:info(Storage, size)).

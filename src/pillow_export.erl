@@ -29,7 +29,8 @@
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection. 
 start(Port, Storage) ->
-  pillow_server:start(Port, { ?MODULE, handle, [Storage] }).
+  Pid = pillow_server:start(Port, { ?MODULE, handle, [Storage] }),
+  estatsd:gauge("pillow.export.boot", 1), Pid.
 
 % Stream a snapshot of the current term storage (Ets) to the provided socket
 % upon request and drop everything afterwards.
@@ -39,4 +40,5 @@ handle(Socket, [Storage]) ->
   end, [], Storage),
   gen_tcp:send(Socket, Data), gen_tcp:close(Socket),
   ets:delete_all_objects(Storage),
+  estatsd:gauge("pillow.export", 1),
   ok.

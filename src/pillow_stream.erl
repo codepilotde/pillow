@@ -24,15 +24,18 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/2, handle/2, update/1]).
+-export([start/2, handle/2, update/1, statistics/1]).
 
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection.
 start(Port, Clients) ->
-  pillow_server:start(Port, { ?MODULE, handle, [Clients] }).
+  timer:apply_interval(10000, ?MODULE, statistics, [Clients]),
+  Pid = pillow_server:start(Port, { ?MODULE, handle, [Clients] }),
+  estatsd:gauge("pillow.stream.boot", 1), Pid.
 
 % Subscribe to the keys transferred over the socket.
 handle(Socket, [Clients]) ->
+  estatsd:increment("pillow.stream.clients"),
   handle(Socket, spawn_link(?MODULE, update, [Socket]), [Clients]).
 handle(Socket, Pid, [Clients]) ->
   case gen_tcp:recv(Socket, 0) of
@@ -48,6 +51,7 @@ handle(Socket, Pid, [Clients]) ->
     % exit the event loop.
     { error, closed } ->
       unsubscribe(Pid, Clients),
+      estatsd:decrement("pillow.stream.clients"),
       ok
   end.
 
@@ -56,6 +60,7 @@ update(Socket) ->
   receive
     { update, Entry } ->
       gen_tcp:send(Socket, Entry ++ "\n"),
+      estatsd:increment("pillow.stream.total"),
       update(Socket);
     _ ->
       ok
@@ -88,3 +93,7 @@ unsubscribe(Pid, Clients) ->
     end
   end, [], Clients),
   ok.
+
+% Send some statistics to estatsd.
+statistics(Clients) ->
+  estatsd:gauge("pillow.stream.unique", ets:info(Clients, size)).
