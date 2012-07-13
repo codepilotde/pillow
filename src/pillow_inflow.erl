@@ -62,13 +62,15 @@ process(Bytes, Storage, Clients) ->
   Data = binary_to_list(Bytes),
   case Data of
     [1 | Timestamp] ->
+      % --- BETA --------------------------------------------------------------
       [Y, M, D, H, I, S] = lists:map(fun (Value) ->
         list_to_integer(Value)
       end, string:tokens(Timestamp -- [13, 10], ". :;")),
-
+      % --- BETA --------------------------------------------------------------
       T = calendar:datetime_to_gregorian_seconds({ { Y, M, D }, { H, I, S } }),
       L = calendar:datetime_to_gregorian_seconds(erlang:localtime()),
-      estatsd:timing("pillow.inflow.delay", (L - T) * 1000);
+      estatsd:timing("pillow.inflow.delay", (L - T + 1));
+      % --- BETA --------------------------------------------------------------
     _ ->
       Updates = process(Data, Storage, Clients, 0),
       estatsd:increment("pillow.inflow.total", Updates)
