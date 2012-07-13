@@ -42,7 +42,7 @@ stop(_State) ->
 
 % Setup term storages and return the worker specifications for the supervisor.
 init(_Ports = [Inflow, Export, Stream]) ->
-  Storage = ets:new(pillow_storage, [ordered_set, public]),                     % COUNT erlang.pillow.processes ...
+  Storage = ets:new(pillow_storage, [set, public]),
   Clients = ets:new(pillow_clients, [set, public]),
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
