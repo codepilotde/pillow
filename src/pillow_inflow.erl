@@ -69,7 +69,7 @@ process(Bytes, Storage, Clients) ->
       % --- BETA --------------------------------------------------------------
       T = calendar:datetime_to_gregorian_seconds({ { Y, M, D }, { H, I, S } }),
       L = calendar:datetime_to_gregorian_seconds(erlang:localtime()),
-      estatsd:timing("pillow.inflow.delay", (L - T + 1));
+      estatsd:timing("pillow.inflow.delay", L - T);
       % --- BETA --------------------------------------------------------------
     _ ->
       Updates = process(Data, Storage, Clients, 0),
