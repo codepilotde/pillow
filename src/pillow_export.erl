@@ -35,7 +35,7 @@ start(Port, Storage) ->
 % Stream a snapshot of the current term storage (Ets) to the provided socket
 % upon request and drop everything afterwards.
 handle(Socket, [Storage]) ->
-  Data = ets:foldr(fun({ Key, Value }, List) -> 
+  Data = ets:foldr(fun ({ Key, Value }, List) -> 
     [Key, $\;, Value, $\n | List]
   end, [], Storage),
   gen_tcp:send(Socket, Data), gen_tcp:close(Socket),

@@ -45,8 +45,7 @@ handle(Socket, Rest, [Storage, Clients]) ->
     % the data and re-enter the event loop to receive further data.
     { ok, Bytes } ->
       { Left, Right } = partition(<<Rest/bitstring, Bytes/bitstring>>),
-      spawn_link(?MODULE, process, [binary_to_list(Left), Storage, Clients]),         % 01 ASCII --> start of heading timestamp
-      estatsd:increment("pillow.inflow.bytes", byte_size(Bytes)),
+      spawn_link(?MODULE, process, [Left, Storage, Clients]),
       handle(Socket, Right, [Storage, Clients]);
 
     % The socket handle was closed, so exit the event loop.
@@ -55,11 +54,25 @@ handle(Socket, Rest, [Storage, Clients]) ->
       ok
   end.
 
-% Split the provided data at line breaks into key/value combinations and
+% --- CUSTOM FUNCTIONALITY --> EXTRA MODULE ! REPOSITORY ----------------------
+
+% Split the provided data at line breaks into key/value combinations and              % COMMENTS
 % process each entry by writing/streaming it.
-process(Data, Storage, Clients) ->
-  Updates = process(Data, Storage, Clients, 0),
-  estatsd:increment("pillow.inflow.total", Updates),
+process(Bytes, Storage, Clients) ->
+  Data = binary_to_list(Bytes),
+  case Data of
+    [1 | Timestamp] ->
+      [Y, M, D, H, I, S] = lists:map(fun (Value) ->
+        list_to_integer(Value)
+      end, string:tokens(Timestamp -- [13, 10], ". :;")),
+
+      T = calendar:datetime_to_gregorian_seconds({ { Y, M, D }, { H, I, S } }),
+      L = calendar:datetime_to_gregorian_seconds(erlang:localtime()),
+      estatsd:timing("pillow.inflow.delay", (L - T) * 1000);
+    _ ->
+      Updates = process(Data, Storage, Clients, 0),
+      estatsd:increment("pillow.inflow.total", Updates)
+  end,
   ok.
 process([], _, _, Updates) ->
   Updates;
