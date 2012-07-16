@@ -24,34 +24,33 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/2, handle/2, update/1, statistics/1]).
+-export([start/1, handle/2, update/1, stats/1]).
 
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection.
-start(Port, Clients) ->
-  timer:apply_interval(10000, ?MODULE, statistics, [Clients]),
-  Pid = pillow_server:start(Port, { ?MODULE, handle, [Clients] }),
-  estatsd:gauge("pillow.stream.boot", 1), Pid.
+start(Ets) ->
+  { ok, [Port] } = application:get_env(pillow, stream),
+  timer:apply_interval(10000, ?MODULE, stats, [Ets]),
+  pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
 
 % Subscribe to the keys transferred over the socket.
-handle(Socket, [Clients]) ->
-  estatsd:increment("pillow.stream.clients"),
-  handle(Socket, spawn_link(?MODULE, update, [Socket]), [Clients]).
-handle(Socket, Pid, [Clients]) ->
+handle(Socket, [Ets]) ->
+  pillow:stats(increment, ["pillow.stream.clients"]),
+  handle(Socket, spawn_link(?MODULE, update, [Socket]), [Ets]).
+handle(Socket, Pid, [Ets]) ->
   case gen_tcp:recv(Socket, 0) of
 
     % We received a list of keys to subscribe to, so split all bytes at
     % linefeeds to obtain the keys and wait for further keys.
     { ok, Bytes } ->
-      Keys = string:tokens(binary_to_list(Bytes) -- [13, 10], [$\;, $\n]),
-      subscribe(Keys, Pid, Clients),
-      handle(Socket, Pid, [Clients]);
+      Keys = string:tokens(binary_to_list(Bytes) -- [13, 10], [$\n]),
+      subscribe(Keys, Pid, Ets),
+      handle(Socket, Pid, [Ets]);
 
-    % The socket handle was closed, so unregister the process from all keys and
-    % exit the event loop.
+    % The socket handle was closed, so unregister the process and exit loop.
     { error, closed } ->
-      unsubscribe(Pid, Clients),
-      estatsd:decrement("pillow.stream.clients"),
+      unsubscribe(Pid, Ets),
+      pillow:stats(decrement, ["pillow.stream.clients"]),
       ok
   end.
 
@@ -60,7 +59,7 @@ update(Socket) ->
   receive
     { update, Entry } ->
       gen_tcp:send(Socket, Entry ++ "\n"),
-      estatsd:increment("pillow.stream.total"),
+      pillow:stats(increment, ["pillow.stream.total"]),
       update(Socket);
     _ ->
       ok
@@ -70,20 +69,20 @@ update(Socket) ->
 % Private
 % -----------------------------------------------------------------------------
 
-% Subscribe the update process to a set of keys.
+% Subscribe the process to a set of keys.
 subscribe([], _, _) ->
   ok;
-subscribe([Key | Rest], Pid, Clients) ->
+subscribe([Key | Rest], Pid, { Storage, Clients }) ->
   case ets:lookup(Clients, Key) of
     [] ->
       ets:insert(Clients, { Key, [Pid] });
     [{ _, Pids }] ->
       ets:insert(Clients, { Key, [Pid | Pids] })
   end,
-  subscribe(Rest, Pid, Clients).
+  subscribe(Rest, Pid, { Storage, Clients }).
 
-% Unsubscribe the update process from all keys.
-unsubscribe(Pid, Clients) ->
+% Unsubscribe the process from all keys.
+unsubscribe(Pid, { _, Clients }) ->
   ets:foldl(fun ({ Key, Value }, _) -> 
     case Value -- [Pid] of
       [] ->
@@ -94,6 +93,6 @@ unsubscribe(Pid, Clients) ->
   end, [], Clients),
   ok.
 
-% Send some statistics to estatsd.
-statistics(Clients) ->
-  estatsd:gauge("pillow.stream.unique", ets:info(Clients, size)).
+% Report regular statistics.
+stats({ _, Clients }) ->
+  pillow:stats(gauge, ["pillow.stream.unique", ets:info(Clients, size)]).

@@ -49,7 +49,7 @@ start(Port, Callback) when is_integer(Port), is_tuple(Callback) ->
 init(State = #state{ port = Port }) ->
   case gen_tcp:listen(Port, ?OPTIONS) of
 
-    % The listening socket could be instantiated, so call the accept function..
+    % The listening socket could be instantiated, so call the accept function.
     { ok, Listen } ->
       { ok, accept(State#state{ socket = Listen }) };
 
@@ -71,7 +71,24 @@ accept_loop({ Server, Listen, { Module, Function, Params } }) ->
     % A connection could be established, so execute our callback.
     { ok, Socket } ->
       gen_server:cast(Server, { accepted, self() }),
-      Module:Function(Socket, Params);
+
+      % The first parameter has to be the ETS instance, the second parameter
+      % is optimal and, if given, must be a valid callback. The accepted socket
+      % is passed to the provided callback to load a vendor- and connection-
+      % specific callback for processing individual lines.
+      case Params of
+        [ Ets, { M, F } ] ->
+          case M:F(Socket) of
+            { ok, Handle } ->
+              Module:Function(Socket, [Ets, Handle]);
+            { error, _ } ->
+              ok
+          end;
+        [ Ets ] ->
+          Module:Function(Socket, [Ets]);
+        _ ->
+          ok
+      end;
 
     % The connection failed for some reason or was closed.
     { error, _ } ->

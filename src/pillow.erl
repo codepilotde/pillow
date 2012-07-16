@@ -25,37 +25,41 @@
 
 % Export functions demanded by the OTP Application behaviour.
 -behaviour(application).
--export([start/2, stop/1, init/1]).
+-export([start/2, stop/1, init/1, stats/2]).
 
 % Define parameters for supervisor specification.
 -define(MAX_RESTART,  5).
 -define(MAX_SECONDS, 60).
 
 % Start the pillow application by initializing the supervisor.
-start(_Type, Args) ->
-  Pid = supervisor:start_link(?MODULE, Args),
-  estatsd:gauge("pillow.boot", 1), Pid.
+start(_Type, _Args) ->
+  Pid = supervisor:start_link(?MODULE, []),
+  pillow:stats(gauge, ["pillow.boot", 1]), Pid.
 
 % Executed after the application is stopped.
 stop(_State) ->
   ok.
 
 % Setup term storages and return the worker specifications for the supervisor.
-init(_Ports = [Inflow, Export, Stream]) ->
-  Storage = ets:new(pillow_storage, [set, public]),
-  Clients = ets:new(pillow_clients, [set, public]),
+init(_) ->
+  Ets = {
+    ets:new(pillow_storage, [set, public]),
+    ets:new(pillow_clients, [set, public])
+  },
   { ok, {
     { one_for_one, ?MAX_RESTART, ?MAX_SECONDS }, [
-
-      % Main worker processes (inflow, export, stream).
-      { pillow_export, { pillow_export, start, [Export, Storage] },
+      { pillow_export, { pillow_export, start, [Ets] },
         permanent, 2000, worker, []
       },
-      { pillow_inflow, { pillow_inflow, start, [Inflow, Storage, Clients] },
+      { pillow_inflow, { pillow_inflow, start, [Ets] },
         permanent, 2000, worker, []
       },
-      { pillow_stream, { pillow_stream, start, [Stream, Clients] },
+      { pillow_stream, { pillow_stream, start, [Ets] },
         permanent, 2000, worker, []
       }
     ]
   } }.
+
+% Send statistics to estatsd.
+stats(Function, Args) ->
+  erlang:apply(estatsd, Function, Args).

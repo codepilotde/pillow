@@ -24,21 +24,21 @@
 -author('Martin Donath <md@struct.cc>').
 
 % Public functions.
--export([start/2, handle/2]).
+-export([start/1, handle/2]).
 
 % Start a server on the provided port and hand over the Ets instance to the
 % callback which is invoked by the server upon an incoming connection. 
-start(Port, Storage) ->
-  Pid = pillow_server:start(Port, { ?MODULE, handle, [Storage] }),
-  estatsd:gauge("pillow.export.boot", 1), Pid.
+start(Ets) ->
+  { ok, [Port] } = application:get_env(pillow, export),
+  pillow_server:start(Port, { ?MODULE, handle, [Ets] }).
 
-% Stream a snapshot of the current term storage (Ets) to the provided socket
+% Stream the content of the current term storage (Ets) to the provided socket
 % upon request and drop everything afterwards.
-handle(Socket, [Storage]) ->
+handle(Socket, [{ Storage, _ }]) ->
   Data = ets:foldr(fun ({ Key, Value }, List) -> 
-    [Key, $\;, Value, $\n | List]
+    [Key, $\;, Value, $\n | List]                                               % vendor specific code!
   end, [], Storage),
   gen_tcp:send(Socket, Data), gen_tcp:close(Socket),
   ets:delete_all_objects(Storage),
-  estatsd:gauge("pillow.export", 1),
+  pillow:stats(gauge, ["pillow.export", 1]),
   ok.
