@@ -41,7 +41,7 @@
 
 % Start a server on the provided port and register the provided callback.
 % This method is used to start the server module from outside.
-start(Port, Callback) when is_integer(Port), is_tuple(Callback) ->
+start(Port, Callback) ->
   gen_server:start_link(?MODULE, #state{ port = Port, call = Callback }, []).
 
 % Initialize a TCP server on the provided port and handle incoming
@@ -72,19 +72,19 @@ accept_loop({ Server, Listen, { Module, Function, Params } }) ->
     { ok, Socket } ->
       gen_server:cast(Server, { accepted, self() }),
 
-      % The first parameter has to be the ETS instance, the second parameter
-      % is optimal and, if given, must be a valid callback. The accepted socket
+      % The first parameter has to be the ETS instance, the second parameter is
+      % optional, but if given, has to be a valid callback. The accepted socket
       % is passed to the provided callback to load a vendor- and connection-
       % specific callback for processing individual lines.
       case Params of
-        [ Ets, { M, F } ] ->
+        [Ets, { M, F }] ->
           case M:F(Socket) of
             { ok, Handle } ->
               Module:Function(Socket, [Ets, Handle]);
             { error, _ } ->
               ok
           end;
-        [ Ets ] ->
+        [Ets] ->
           Module:Function(Socket, [Ets]);
         _ ->
           ok
